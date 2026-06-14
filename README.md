@@ -27,7 +27,7 @@ Red Tailscale  ──────────────► Raspberry Pi ──
 ```mermaid
 flowchart LR
     M["📱 Móvil"] -->|Tailscale| T(["🔵 Red Tailscale"])
-    T --> RPI["🍓 Raspberry Pi<br/>siempre encendida"]
+    T --> RPI["⚙️ Raspberry Pi<br/>siempre encendida"]
     RPI -->|Wake-on-LAN LAN| PC["💻 PC Windows"]
     RPI -->|SSH por IP local| PC
     PC --> TUN["🌐 VS Code Tunnel"]
@@ -153,6 +153,22 @@ como servicio:
 code tunnel service install
 ```
 
+### Comprobar si VS Code Tunnel está activo
+
+Para confirmar que el túnel está realmente en ejecución puedes usar el alias
+`pc-status` (ver Parte 3) o, directamente en el PC:
+
+```powershell
+tasklist | findstr code
+```
+
+Debería aparecer un proceso relacionado con VS Code, normalmente:
+
+- `code.exe`
+- `code-tunnel.exe`
+
+dependiendo de la versión instalada de VS Code.
+
 ### Acceso desde el móvil
 
 1. Abre el navegador.
@@ -163,7 +179,7 @@ code tunnel service install
 
 ---
 
-## 🍓 Parte 3 — Raspberry Pi como centro de control
+## ⚙️ Parte 3 — Raspberry Pi como centro de control
 
 ### Instalar Wake-on-LAN
 
@@ -226,6 +242,50 @@ Iniciar y dejar el servicio en automático:
 Start-Service sshd
 Set-Service -Name sshd -StartupType Automatic
 Get-Service sshd   # debe aparecer Status: Running
+```
+
+### Verificar el servicio SSH
+
+Antes de probar la conexión desde la Raspberry, conviene comprobar en Windows que
+el servicio está iniciado y escuchando en el puerto 22:
+
+```powershell
+Get-Service sshd
+Test-NetConnection localhost -Port 22
+```
+
+`Get-Service sshd` debe mostrar `Status: Running`, y `Test-NetConnection` debe
+indicar `TcpTestSucceeded : True`. Si ambas comprobaciones son correctas, el
+servicio SSH está activo y aceptando conexiones localmente.
+
+### Verificar que Windows está en red privada ⚠️
+
+> ⚠️ **Si Windows tiene la red configurada como "pública", el firewall bloquea las
+> conexiones SSH entrantes** y la Raspberry Pi no podrá conectarse aunque el
+> servicio `sshd` esté iniciado. **Este paso fue necesario para permitir las
+> conexiones SSH desde la Raspberry Pi.**
+
+Comprueba la categoría de red:
+
+```powershell
+Get-NetConnectionProfile
+```
+
+Si aparece:
+
+```text
+NetworkCategory : Public
+```
+
+Cámbialo a red privada desde:
+
+**Configuración → Red e Internet → Ethernet/WiFi → Propiedades → Red privada**
+
+o mediante PowerShell (sustituye `X` por el `InterfaceIndex` que muestre
+`Get-NetConnectionProfile`):
+
+```powershell
+Set-NetConnectionProfile -InterfaceIndex X -NetworkCategory Private
 ```
 
 ### Probar conectividad SSH
@@ -322,6 +382,16 @@ Aplica los cambios:
 source ~/.bashrc
 ```
 
+**Aliases adicionales útiles (opcionales).** Cómodos para administración remota
+del PC, aunque no son imprescindibles:
+
+```bash
+# Apagar el PC
+alias pc-off='ssh usuario_windows@IP_LOCAL_PC "shutdown /s /t 0"'
+# Reiniciar el PC
+alias pc-restart='ssh usuario_windows@IP_LOCAL_PC "shutdown /r /t 0"'
+```
+
 > ⚠️ **Para parar el túnel usa `code tunnel kill`** (comando oficial), no
 > `taskkill /F /IM code-tunnel.exe`: el binario real suele llamarse `code.exe` y
 > ese `taskkill` puede no encontrarlo o cerrar procesos que no toca.
@@ -366,6 +436,136 @@ Comandos de uso diario:
 | Iniciar el túnel | `pc-tunnel` |
 | Ver estado | `pc-status` |
 | Detener el túnel | `pc-kill-tunnel` |
+
+---
+
+## 🛠️ Problemas comunes con VS Code Tunnel
+
+### Error: The VS Code gateway is not currently running
+
+Este error puede aparecer **aunque el proceso parezca estar iniciado** (por
+ejemplo, aunque `tasklist | findstr code` muestre un proceso de VS Code).
+
+Comprueba primero el estado real del túnel:
+
+```powershell
+code tunnel status
+```
+
+Si el gateway no está disponible, intenta reiniciar el túnel:
+
+```powershell
+code tunnel kill
+code tunnel --accept-server-license-terms
+```
+
+Si prefieres ejecutarlo de forma permanente como servicio:
+
+```powershell
+code tunnel service install
+```
+
+> ℹ️ **Nota:** el comportamiento de estos comandos puede variar según la versión
+> instalada de VS Code. Si algo no funciona como se describe, comprueba la versión
+> con `code --version` y consulta el estado con `code tunnel status`.
+
+---
+
+## 🐞 Incidencias encontradas durante la configuración
+
+Resumen de los problemas reales encontrados durante la instalación y cómo se
+resolvieron:
+
+- **Wake-on-LAN funcionaba correctamente** desde la Raspberry Pi.
+- **SSH no funcionaba inicialmente** porque Windows estaba configurado como red
+  pública, lo que hacía que el firewall bloquease las conexiones entrantes.
+- **Tras cambiar la red a privada**, las conexiones SSH desde la Raspberry Pi
+  comenzaron a funcionar correctamente.
+- **VS Code Tunnel podía aparecer activo** (proceso en ejecución) aunque el
+  gateway no estuviera realmente disponible.
+- **Fue necesario validar manualmente** el estado del túnel (`code tunnel status`)
+  y los procesos en ejecución (`tasklist | findstr code`).
+
+---
+
+## 🔎 Cómo verificar que todo sigue funcionando
+
+Después de completar la instalación, puedes comprobar cada componente del entorno
+de forma independiente.
+
+### Verificar Tailscale
+
+En la Raspberry:
+
+```bash
+tailscale status
+tailscale ip -4
+```
+
+Verifica que el dispositivo aparece conectado en la
+[consola de administración de Tailscale](https://login.tailscale.com/admin/machines).
+
+### Verificar Wake-on-LAN
+
+Desde la Raspberry (sustituye por la MAC real del equipo):
+
+```bash
+wakeonlan AA:BB:CC:DD:EE:FF
+```
+
+Comprueba que el PC se enciende correctamente.
+
+### Verificar SSH
+
+Comprueba la conectividad y el acceso SSH:
+
+```bash
+ping IP_DEL_PC
+ssh usuario_windows@IP_DEL_PC
+```
+
+La conexión debe realizarse sin errores.
+
+### Verificar autenticación por clave pública
+
+```bash
+ssh -v usuario_windows@IP_DEL_PC
+```
+
+Verifica que aparece algo similar a:
+
+```text
+Offering public key
+Server accepts key
+```
+
+y que **no solicita contraseña**.
+
+### Verificar VS Code Tunnel
+
+En Windows:
+
+```powershell
+code tunnel status
+tasklist | findstr code
+```
+
+Comprueba que existe un proceso relacionado con VS Code Tunnel. Después, accede
+desde el móvil o el navegador a [vscode.dev](https://vscode.dev) e inicia sesión
+con la **misma cuenta** utilizada para crear el túnel.
+
+### Verificar acceso remoto completo
+
+Realiza el flujo completo de principio a fin:
+
+1. Conéctate a **Tailscale** desde el móvil.
+2. Conéctate a la **Raspberry por SSH**.
+3. Enciende el PC mediante **Wake-on-LAN**.
+4. Comprueba el **acceso SSH al PC**.
+5. Abre **VS Code Tunnel** desde el navegador.
+6. Confirma que puedes abrir el proyecto y editar archivos.
+
+Si todos estos pasos funcionan, el entorno remoto está **completamente operativo**.
 
 ---
 
