@@ -1,0 +1,24 @@
+# Secretos y claves
+.env
+.env.*
+!.env.example
+*.key
+*.pem
+id_ed25519
+id_ed25519.*
+id_rsa
+id_rsa.*
+authorized_keys
+
+# Logs y temporales
+*.log
+*.tmp
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+
+# Sistema
+.DS_Store
+Thumbs.db
