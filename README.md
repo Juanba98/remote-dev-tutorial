@@ -26,12 +26,12 @@ Red Tailscale  ──────────────► Raspberry Pi ──
 
 ```mermaid
 flowchart LR
-    M[📱 Móvil] -->|Tailscale| T((Red Tailscale))
-    T --> RPI[🍓 Raspberry Pi<br/>siempre encendida]
-    T --> PC[💻 PC Windows]
-    RPI -->|Wake-on-LAN en la LAN local| PC
+    M["📱 Móvil"] -->|Tailscale| T(["🔵 Red Tailscale"])
+    T --> RPI["🍓 Raspberry Pi<br/>siempre encendida"]
+    T --> PC["💻 PC Windows"]
+    RPI -->|Wake-on-LAN LAN| PC
     RPI -->|SSH| PC
-    PC --> TUN[🌐 VS Code Tunnel]
+    PC --> TUN["🌐 VS Code Tunnel"]
     M -->|navegador| TUN
 ```
 
