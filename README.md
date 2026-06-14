@@ -19,26 +19,27 @@ La solución se apoya en tres componentes:
 Móvil
   │
   ▼
-Red Tailscale  ──────────────► Raspberry Pi ──(LAN / Wake-on-LAN)──► PC Windows
-  │                                                                      │
-  └──────────────────────────────────────────────────────────────►  VS Code Tunnel
+Red Tailscale  ──────────────► Raspberry Pi ──(LAN / Wake-on-LAN / SSH)──► PC Windows
+  │                                                                            │
+  └──────────────────────────────────────────────────────────────────►  VS Code Tunnel
 ```
 
 ```mermaid
 flowchart LR
     M["📱 Móvil"] -->|Tailscale| T(["🔵 Red Tailscale"])
     T --> RPI["🍓 Raspberry Pi<br/>siempre encendida"]
-    T --> PC["💻 PC Windows"]
-    RPI -->|Wake-on-LAN LAN| PC
-    RPI -->|SSH| PC
+    RPI -->|Wake-on-LAN LAN| PC["💻 PC Windows"]
+    RPI -->|SSH por IP local| PC
     PC --> TUN["🌐 VS Code Tunnel"]
     M -->|navegador| TUN
 ```
 
 > ⚠️ **Clave del montaje:** la Raspberry Pi y el PC están en la **misma red local
 > (LAN)**. Eso permite que la Pi encienda el PC con Wake-on-LAN (ver Parte 3) y
-> sirva de puente siempre disponible. Desde fuera de casa entras por Tailscale a
-> la Pi, y la Pi actúa dentro de tu red.
+> le hable por SSH usando su **IP local**, sin necesidad de instalar Tailscale en
+> el PC. Solo necesitan Tailscale los dispositivos que entran desde fuera de casa:
+> el **móvil** y la **Raspberry Pi**. Desde fuera entras por Tailscale a la Pi, y
+> la Pi actúa dentro de tu red.
 
 ---
 
@@ -74,31 +75,39 @@ sudo tailscale up
 Se mostrará una URL similar a `https://login.tailscale.com/a/XXXXXXXX`.
 Ábrela desde el móvil o el ordenador y autoriza el dispositivo.
 
-### Instalar Tailscale en Windows
+### Instalar Tailscale en el móvil
 
-1. Descargar e instalar Tailscale.
-2. Iniciar sesión con la **misma cuenta** usada en la Raspberry Pi.
-3. Verificar que ambos dispositivos aparecen en la misma red Tailscale.
+Este paso es **imprescindible**: el móvil es el dispositivo desde el que te
+conectas a la Raspberry Pi cuando estás fuera de casa, así que necesita estar en
+la misma red Tailscale.
+
+1. Instala la app **Tailscale** desde la
+   [Play Store](https://play.google.com/store/apps/details?id=com.tailscale.ipn)
+   (Android) o la [App Store](https://apps.apple.com/app/tailscale/id1470499037) (iOS).
+2. Inicia sesión con la **misma cuenta** usada en la Raspberry Pi.
+3. Activa la VPN cuando la app lo solicite.
+
+> 💡 **El PC con Windows NO necesita Tailscale.** La Raspberry Pi le habla por la
+> red local (Wake-on-LAN y SSH a su IP local), y el acceso al editor desde el
+> móvil va por **VS Code Tunnel** (relay de Microsoft), que tampoco depende de
+> Tailscale. Instalarlo en el PC sería un paso innecesario.
 
 ### Verificación
 
-Comprobar estado y obtener la IP de Tailscale:
+En la Raspberry, comprobar estado y obtener su IP de Tailscale:
 
 ```bash
 tailscale status
 tailscale ip -4
 ```
 
-Comprobar conectividad hacia el PC:
+En `tailscale status` deben aparecer al menos la **Raspberry Pi** y el **móvil**
+con la misma cuenta. Anota también la **IP local (LAN)** del PC, que usarás para
+el SSH desde la Pi:
 
-```bash
-tailscale ping IP_TAILSCALE_PC
+```powershell
+ipconfig | findstr /i "IPv4"
 ```
-
-> ⚠️ **No uses `ping` normal para esta comprobación.** El Firewall de Windows
-> bloquea ICMP (eco) por defecto, así que `ping IP_TAILSCALE_PC` puede fallar
-> aunque la conexión funcione perfectamente. `tailscale ping` prueba el túnel real
-> y evita ese falso negativo.
 
 ---
 
@@ -224,7 +233,7 @@ Get-Service sshd   # debe aparecer Status: Running
 Desde la Raspberry:
 
 ```bash
-ssh usuario_windows@IP_TAILSCALE_PC
+ssh usuario_windows@IP_LOCAL_PC
 ```
 
 La primera vez responde `yes` a la pregunta de la huella y escribe la contraseña
@@ -284,14 +293,14 @@ Restart-Service sshd
 Desde la Raspberry:
 
 ```bash
-ssh usuario_windows@IP_TAILSCALE_PC hostname
+ssh usuario_windows@IP_LOCAL_PC hostname
 ```
 
 Si devuelve el nombre del PC **sin pedir contraseña**, está correcto. Para ver
 qué método usa:
 
 ```bash
-ssh -v usuario_windows@IP_TAILSCALE_PC
+ssh -v usuario_windows@IP_LOCAL_PC
 # Deberías ver: Offering public key / Server accepts key / Authenticated using publickey
 ```
 
@@ -301,10 +310,10 @@ Edita `~/.bashrc` (`nano ~/.bashrc`) y añade:
 
 ```bash
 alias pc-on='wakeonlan AA:BB:CC:DD:EE:FF'
-alias pc='ssh usuario_windows@IP_TAILSCALE_PC'
-alias pc-tunnel='ssh usuario_windows@IP_TAILSCALE_PC "cmd /c start \"\" code tunnel --accept-server-license-terms"'
-alias pc-kill-tunnel='ssh usuario_windows@IP_TAILSCALE_PC "code tunnel kill"'
-alias pc-status='ssh usuario_windows@IP_TAILSCALE_PC "tasklist | findstr -i code"'
+alias pc='ssh usuario_windows@IP_LOCAL_PC'
+alias pc-tunnel='ssh usuario_windows@IP_LOCAL_PC "cmd /c start \"\" code tunnel --accept-server-license-terms"'
+alias pc-kill-tunnel='ssh usuario_windows@IP_LOCAL_PC "code tunnel kill"'
+alias pc-status='ssh usuario_windows@IP_LOCAL_PC "tasklist | findstr -i code"'
 ```
 
 Aplica los cambios:
@@ -363,12 +372,13 @@ Comandos de uso diario:
 ## ✅ Checklist de validación
 
 - [ ] Tailscale instalado en la Raspberry Pi
-- [ ] Tailscale instalado en Windows
+- [ ] Tailscale instalado en el móvil
 - [ ] Raspberry visible en Tailscale
-- [ ] PC visible en Tailscale
+- [ ] Móvil visible en Tailscale
+- [ ] IP local (LAN) del PC anotada
 - [ ] OpenSSH Server instalado en Windows
 - [ ] Autenticación SSH por clave funcionando (clave en el archivo correcto ⚠️)
-- [ ] `ssh usuario_windows@IP_TAILSCALE_PC hostname` funciona sin contraseña
+- [ ] `ssh usuario_windows@IP_LOCAL_PC hostname` funciona sin contraseña
 - [ ] Wake-on-LAN operativo desde la Raspberry
 - [ ] VS Code Tunnel operativo
 - [ ] Aliases configurados
